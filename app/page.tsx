@@ -6,12 +6,20 @@ import {
   useDraggable,
   useDroppable,
   type DragEndEvent,
-  type DragStartEvent,
   DragOverlay,
   pointerWithin,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Plus, Trash2, GripVertical, CornerDownLeft } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  GripVertical,
+  CornerDownLeft,
+  Edit2,
+  Check,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,7 +29,7 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +51,7 @@ import {
   addEvidenceToTrait as addEvidenceToTraitAPI,
   removeEvidenceFromTrait as removeEvidenceFromTraitAPI,
   loadAllData,
+  updateEvidenceContent,
 } from "@/lib/data";
 
 // 삭제 확인 대화상자 컴포넌트
@@ -79,11 +88,16 @@ function DeleteConfirmDialog({
 function DraggableEvidenceCardComponent({
   evidence,
   onDelete,
+  onUpdateContent,
 }: {
   evidence: EvidenceCard;
   onDelete: () => void;
+  onUpdateContent: (content: string) => void;
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(evidence.content);
+
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: evidence.id,
@@ -91,6 +105,7 @@ function DraggableEvidenceCardComponent({
         type: "evidence",
         evidence,
       },
+      disabled: isEditing,
     });
 
   const style = transform
@@ -99,13 +114,29 @@ function DraggableEvidenceCardComponent({
       }
     : undefined;
 
+  const handleSave = () => {
+    if (editedContent.trim() !== "" && editedContent !== evidence.content) {
+      onUpdateContent(editedContent);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditedContent(evidence.content);
+    setIsEditing(false);
+  };
+
   return (
     <>
       <Card
         ref={setNodeRef}
         style={style}
         className={`mb-3 border-2 ${
-          isDragging ? "opacity-50 border-primary" : "hover:border-primary"
+          isDragging
+            ? "opacity-50 border-primary"
+            : isEditing
+            ? "border-primary shadow-md"
+            : "hover:border-primary"
         }`}
       >
         <CardHeader className="p-3 pb-0">
@@ -114,22 +145,80 @@ function DraggableEvidenceCardComponent({
               {evidence.date}
             </span>
             <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="h-6 w-6"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              <div {...attributes} {...listeners} className="cursor-move">
-                <GripVertical className="h-5 w-5 text-muted-foreground" />
-              </div>
+              {isEditing ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSave}
+                    className="h-6 w-6 text-green-600 hover:text-green-700"
+                    title="저장"
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCancel}
+                    className="h-6 w-6 text-red-600 hover:text-red-700"
+                    title="취소"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsEditing(true)}
+                    className="h-6 w-6"
+                    title="수정"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="h-6 w-6"
+                    title="삭제"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <div
+                    {...attributes}
+                    {...listeners}
+                    className="cursor-move ml-1"
+                  >
+                    <GripVertical className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-3 pt-1">
-          <p className="text-sm">{evidence.content}</p>
+          {isEditing ? (
+            <Textarea
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              className="text-sm resize-none"
+              rows={3}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSave();
+                }
+                if (e.key === "Escape") {
+                  handleCancel();
+                }
+              }}
+            />
+          ) : (
+            <p className="text-sm whitespace-pre-wrap">{evidence.content}</p>
+          )}
         </CardContent>
       </Card>
 
@@ -177,6 +266,7 @@ function TraitSection({
   onDelete: () => void;
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const { setNodeRef, isOver } = useDroppable({
     id: trait.id,
     data: {
@@ -193,12 +283,28 @@ function TraitSection({
       >
         <CardHeader className="pb-2">
           <div className="flex justify-between items-center">
-            <Input
-              value={trait.name}
-              onChange={(e) => onChangeName(e.target.value)}
-              className="font-semibold text-lg border-0 p-0 h-auto focus-visible:ring-0"
-              placeholder="특성 이름을 입력하세요"
-            />
+            <div className="flex items-center flex-grow">
+              <Input
+                value={trait.name}
+                onChange={(e) => onChangeName(e.target.value)}
+                onFocus={() => setIsEditing(true)}
+                onBlur={() => setIsEditing(false)}
+                className={`font-semibold text-lg border-0 p-0 h-auto ${
+                  isEditing
+                    ? "ring-2 ring-primary ring-offset-2"
+                    : "focus-visible:ring-0"
+                }`}
+                placeholder="특성 이름을 입력하세요"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 ml-1"
+                title="특성 이름 편집"
+              >
+                <Edit2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -265,9 +371,7 @@ export default function SelfDiscoveryApp() {
   // 근거 목록 상태
   const [evidences, setEvidences] = useState<EvidenceCard[]>([]);
   // 특성 목록 상태
-  const [traits, setTraits] = useState<Trait[]>([
-    { id: "trait-1", name: "특성 1", evidences: [] },
-  ]);
+  const [traits, setTraits] = useState<Trait[]>([]);
   // 새 근거 입력 상태
   const [newEvidence, setNewEvidence] = useState("");
   // 현재 드래그 중인 아이템
@@ -364,6 +468,29 @@ export default function SelfDiscoveryApp() {
     }
   };
 
+  // 근거 내용 업데이트 함수
+  const handleUpdateEvidenceContent = (id: string, newContent: string) => {
+    // 상태 업데이트 (Optimistic UI)
+    const originalEvidences = [...evidences];
+    setEvidences(
+      evidences.map((e) => (e.id === id ? { ...e, content: newContent } : e))
+    );
+
+    // 백그라운드에서 데이터베이스 업데이트
+    if (isInitialized) {
+      updateEvidenceContent(id, newContent).catch((error) => {
+        console.error("근거 내용 업데이트 오류:", error);
+        // 실패 시 UI 롤백
+        setEvidences(originalEvidences);
+        toast({
+          title: "근거 내용 업데이트 실패",
+          description: "근거 내용을 업데이트하는 중 오류가 발생했습니다.",
+          variant: "destructive",
+        });
+      });
+    }
+  };
+
   // 특성 추가 함수
   const addTrait = () => {
     const newTrait: Trait = {
@@ -453,10 +580,6 @@ export default function SelfDiscoveryApp() {
       addEvidenceToTraitAPI(traitId, evidenceId).catch((error) => {
         console.error("근거 이동 오류:", error);
 
-        // 실패 시 UI 롤백 (선택적)
-        // setTraits(previousTraits)
-        // setEvidences(previousEvidences)
-
         toast({
           title: "근거 이동 실패",
           description: "근거를 이동하는 중 오류가 발생했습니다.",
@@ -494,10 +617,6 @@ export default function SelfDiscoveryApp() {
     if (isInitialized) {
       removeEvidenceFromTraitAPI(traitId, evidenceId).catch((error) => {
         console.error("근거 되돌리기 오류:", error);
-
-        // 실패 시 UI 롤백 (선택적)
-        // setTraits(previousTraits)
-        // setEvidences(previousEvidences)
 
         toast({
           title: "근거 되돌리기 실패",
@@ -545,7 +664,7 @@ export default function SelfDiscoveryApp() {
 
   return (
     <div className="container mx-auto p-4 max-w-5xl">
-      <h1 className="text-3xl font-bold text-center mb-8">imyme</h1>
+      <h1 className="text-3xl font-bold text-center mb-8">나의 특징 찾기</h1>
 
       <DndContext
         collisionDetection={pointerWithin}
@@ -579,6 +698,9 @@ export default function SelfDiscoveryApp() {
                   key={evidence.id}
                   evidence={evidence}
                   onDelete={() => removeEvidence(evidence.id)}
+                  onUpdateContent={(newContent) =>
+                    handleUpdateEvidenceContent(evidence.id, newContent)
+                  }
                 />
               ))}
 
